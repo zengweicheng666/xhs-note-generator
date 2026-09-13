@@ -26,28 +26,29 @@ export async function composeMemeImage(
   // 加载图片
   const img = await loadImage(imageUrl);
 
-  // 上半部分放图片（正方形区域，居中裁切）
-  const imgAreaTop = 60;
-  const imgAreaSize = width - 120; // 960x960
-  drawImageCover(ctx, img, 60, imgAreaTop, imgAreaSize, imgAreaSize);
+  // 上半部分放图片（正方形区域，居中；缩小以给更多文案留空间）
+  const imgAreaTop = 40;
+  const imgAreaSize = 820;
+  const imgAreaX = (width - imgAreaSize) / 2;
+  drawImageCover(ctx, img, imgAreaX, imgAreaTop, imgAreaSize, imgAreaSize);
 
   // 图片边框
   ctx.strokeStyle = '#e5e5e5';
   ctx.lineWidth = 2;
-  ctx.strokeRect(60, imgAreaTop, imgAreaSize, imgAreaSize);
+  ctx.strokeRect(imgAreaX, imgAreaTop, imgAreaSize, imgAreaSize);
 
   // 标题
-  const titleY = imgAreaTop + imgAreaSize + 60;
+  const titleY = imgAreaTop + imgAreaSize + 50;
   ctx.fillStyle = '#1a1a1a';
-  ctx.font = 'bold 48px "PingFang SC", "Microsoft YaHei", sans-serif';
+  ctx.font = 'bold 46px "PingFang SC", "Microsoft YaHei", sans-serif';
   ctx.textAlign = 'left';
-  wrapText(ctx, title, 60, titleY, width - 120, 62, 2);
+  wrapText(ctx, title, 60, titleY, width - 120, 60, 2);
 
   // 配文
-  const captionY = titleY + 140;
+  const captionY = titleY + 130;
   ctx.fillStyle = '#444444';
-  ctx.font = '32px "PingFang SC", "Microsoft YaHei", sans-serif';
-  wrapText(ctx, caption, 60, captionY, width - 120, 48, 5);
+  ctx.font = '30px "PingFang SC", "Microsoft YaHei", sans-serif';
+  wrapText(ctx, caption, 60, captionY, width - 120, 46, 7);
 
   // 底部水印
   ctx.fillStyle = '#cccccc';

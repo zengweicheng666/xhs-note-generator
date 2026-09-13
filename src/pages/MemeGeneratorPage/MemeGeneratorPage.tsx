@@ -1,17 +1,31 @@
 import { useState, useCallback } from 'react';
-import { capabilityClient, logger } from '@lark-apaas/client-toolkit-lite';
+import { logger } from '@lark-apaas/client-toolkit-lite';
 import { toast } from 'sonner';
 import { Sparkles } from 'lucide-react';
 import MemeInputSection from './MemeInputSection';
 import MemeResultCard from './MemeResultCard';
 import HistorySection from './HistorySection';
+import SettingsDialog from './SettingsDialog';
 import { useMemeHistory } from '@/hooks/use-meme-history';
-import type { IMemeRecord } from '@/data/meme';
-
-const IMAGE_PLUGIN_ID = 'jokebear_image_generator_1';
-const TEXT_PLUGIN_ID = 'self_deprecating_bear_note_generator_1';
+import { LOCAL_PRESETS, type IMemeRecord } from '@/data/meme';
+import { generateBearImage, generateBearNote } from '@/lib/ark';
 
 type GenerateStage = 'idle' | 'image' | 'text' | 'done';
+
+// 在本地 dev 环境插件不可用时，按关键词挑一条预生成图文
+function pickLocalPreset(keyword: string) {
+  const kw = keyword.trim();
+  const hit = LOCAL_PRESETS.find(p =>
+    p.keywords.some(k => kw.includes(k) || k.includes(kw)),
+  );
+  const picked = hit || LOCAL_PRESETS[Math.floor(Math.random() * LOCAL_PRESETS.length)];
+  return {
+    imageUrl: picked.image,
+    title: picked.title,
+    caption: picked.caption,
+    tags: picked.tags,
+  };
+}
 
 export default function MemeGeneratorPage() {
   const { history, addRecord } = useMemeHistory();
@@ -32,53 +46,46 @@ export default function MemeGeneratorPage() {
 
       let imageUrl = '';
       let title = '';
+      let titles: string[] = [];
       let caption = '';
       let tags: string[] = [];
 
       try {
-        // 并行生成图片和文案
-        const imagePromise = (async () => {
-          const executor = (capabilityClient as any).load(IMAGE_PLUGIN_ID);
-          const result = await (executor as any).call('textToImage', {
-            emotion_keyword: trimmed,
-            image_ratio: '3:4',
-          });
-          if (result?.images?.[0]) {
-            imageUrl = result.images[0];
-          } else {
-            throw new Error('图片生成失败');
-          }
-        })();
-
-        setStage('image');
-
-        const textPromise = (async () => {
-          const executor = (capabilityClient as any).load(TEXT_PLUGIN_ID);
-          const result = await (executor as any).call('textToJson', {
-            emotion_keyword: trimmed,
-          });
-          title = result?.title || '';
-          caption = result?.content || '';
-          if (Array.isArray(result?.tags)) {
-            tags = result.tags
-              .map((t: any) => (typeof t === 'string' ? t : t?.tag || ''))
-              .filter(Boolean);
-          }
-        })();
-
-        // 等两个都完成
-        await Promise.all([imagePromise, textPromise]);
+        // 图、文并行，互不拖累：图失败用本地图兜底，文案失败用本地文案兜底
+        const [imgRes, noteRes] = await Promise.allSettled([
+          generateBearImage(trimmed),
+          generateBearNote(trimmed),
+        ]);
         setStage('text');
+        const local = pickLocalPreset(trimmed);
 
-        if (!imageUrl) {
-          throw new Error('图片生成失败');
+        if (imgRes.status === 'fulfilled') {
+          imageUrl = imgRes.value;
+        } else {
+          logger.warn('文生图不可用，使用本地配图:', String(imgRes.reason));
+          imageUrl = local.imageUrl;
         }
+
+        if (noteRes.status === 'fulfilled') {
+          title = noteRes.value.title;
+          titles = noteRes.value.titles;
+          caption = noteRes.value.content;
+          tags = noteRes.value.tags;
+        } else {
+          logger.warn('文案模型不可用，使用本地文案:', String(noteRes.reason));
+          title = local.title;
+          titles = [local.title];
+          caption = local.caption;
+          tags = local.tags;
+        }
+        if (!imageUrl) throw new Error('图文都生成失败');
 
         const record: IMemeRecord = {
           id: `meme_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           keyword: trimmed,
           imageUrl,
           title: title || `关于${trimmed}的自嘲熊表情包`,
+          titles: titles.length > 0 ? titles : [title || `关于${trimmed}的自嘲熊表情包`],
           caption: caption || '今天也是被生活拿捏的一天...',
           tags: tags.length > 0 ? tags : ['自嘲熊', '打工人', '表情包'],
           createdAt: Date.now(),
@@ -111,6 +118,11 @@ export default function MemeGeneratorPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-orange-50/60 via-background to-background">
       <main className="max-w-2xl mx-auto px-4 md:px-6 py-10 md:py-16 space-y-10">
+        {/* 右上角设置入口 */}
+        <div className="flex justify-end">
+          <SettingsDialog />
+        </div>
+
         {/* 标题区 */}
         <div className="text-center space-y-3">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium">

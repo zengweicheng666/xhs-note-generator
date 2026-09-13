@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { RefreshCw, Download, Image as ImageIcon } from 'lucide-react';
 import { logger } from '@lark-apaas/client-toolkit-lite';
 import { toast } from 'sonner';
@@ -24,12 +24,21 @@ export default function MemeResultCard({
   onRegenerate,
 }: MemeResultCardProps) {
   const [isDownloading, setIsDownloading] = useState(false);
+  const [titleIdx, setTitleIdx] = useState(0);
+
+  // 切换到新记录时重置选中标题
+  useEffect(() => {
+    setTitleIdx(0);
+  }, [record?.id]);
+
+  const titles = record?.titles?.length ? record.titles : record?.title ? [record.title] : [];
+  const activeTitle = titles[titleIdx] || record?.title || '';
 
   const handleDownload = useCallback(async () => {
     if (!record) return;
     setIsDownloading(true);
     try {
-      const dataUrl = await composeMemeImage(record.imageUrl, record.caption, record.title);
+      const dataUrl = await composeMemeImage(record.imageUrl, record.caption, activeTitle);
       const safeKeyword = record.keyword.replace(/[\\/:*?"<>|]/g, '_');
       downloadImage(dataUrl, `自嘲熊_${safeKeyword}_${Date.now()}.png`);
       toast.success('图片已保存');
@@ -39,7 +48,7 @@ export default function MemeResultCard({
     } finally {
       setIsDownloading(false);
     }
-  }, [record]);
+  }, [record, activeTitle]);
 
   // 空状态
   if (!record && !isGenerating) {
@@ -73,6 +82,8 @@ export default function MemeResultCard({
             <Image
               src={record.imageUrl}
               alt={record.title}
+              loading="eager"
+              decoding="auto"
               className="w-full h-full object-cover"
             />
           ) : isGenerating ? (
@@ -89,13 +100,35 @@ export default function MemeResultCard({
 
         {/* 文本区 */}
         <div className="p-5 space-y-3">
-          {/* 标题 */}
+          {/* 标题（含备选切换） */}
           {showText && (
-            <div>
+            <div className="space-y-2">
               {record?.title ? (
-                <h2 className="text-lg font-semibold text-foreground leading-snug">
-                  {record.title}
-                </h2>
+                <>
+                  <h2 className="text-lg font-semibold text-foreground leading-snug">
+                    {activeTitle}
+                  </h2>
+                  {titles.length > 1 && (
+                    <div className="space-y-1.5 pt-0.5">
+                      <p className="text-xs text-muted-foreground">备选标题，点击切换：</p>
+                      {titles.map((t, i) => (
+                        <button
+                          key={`${t}-${i}`}
+                          type="button"
+                          onClick={() => setTitleIdx(i)}
+                          className={
+                            'block w-full text-left text-sm px-2.5 py-1.5 rounded-md border transition-colors ' +
+                            (i === titleIdx
+                              ? 'border-primary/50 bg-primary/5 text-foreground font-medium'
+                              : 'border-border/60 text-muted-foreground hover:bg-muted/50')
+                          }
+                        >
+                          {i + 1}. {t}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
               ) : (
                 <Skeleton className="h-6 w-4/5 mb-2" />
               )}
