@@ -157,3 +157,22 @@ export function downloadImage(dataUrl: string, filename: string) {
   link.click();
   document.body.removeChild(link);
 }
+
+/**
+ * 按原始尺寸导出配图（不叠加文字），用于发布小红书：
+ * 与页面预览完全一致的 3:4 竖图，PNG 保证黑白线条清晰。
+ */
+export async function exportRawImage(imageUrl: string): Promise<string> {
+  const img = await loadImage(imageUrl);
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas not supported');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.drawImage(img, 0, 0, w, h);
+  return canvas.toDataURL('image/png');
+}

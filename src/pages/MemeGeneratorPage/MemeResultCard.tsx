@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Image } from '@/components/ui/image';
 import { composeMemeImage, downloadImage } from '@/lib/image-composer';
+import PublishDialog from './PublishDialog';
 import type { IMemeRecord } from '@/data/meme';
 
 interface MemeResultCardProps {
@@ -169,23 +170,25 @@ export default function MemeResultCard({
 
       {/* 操作按钮 */}
       {record && !isGenerating && (
-        <div className="flex gap-3 mt-4">
+        <div className="flex gap-2 mt-4">
           <Button
             variant="outline"
-            className="flex-1 h-11"
+            className="flex-1 h-11 px-2 text-sm"
             onClick={onRegenerate}
           >
-            <RefreshCw className="size-4 mr-2" />
+            <RefreshCw className="size-4 mr-1.5" />
             换一换
           </Button>
           <Button
-            className="flex-1 h-11"
+            variant="outline"
+            className="flex-1 h-11 px-2 text-sm"
             onClick={handleDownload}
             disabled={isDownloading}
           >
-            <Download className="size-4 mr-2" />
+            <Download className="size-4 mr-1.5" />
             {isDownloading ? '合成中...' : '下载图片'}
           </Button>
+          <PublishDialog record={record} activeTitle={activeTitle} />
         </div>
       )}
     </div>
