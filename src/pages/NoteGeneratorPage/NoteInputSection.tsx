@@ -1,4 +1,4 @@
-import { useState, useCallback, type FormEvent, type KeyboardEvent } from 'react';
+import { useCallback, type FormEvent, type KeyboardEvent } from 'react';
 import { Shuffle, Sparkles, Minus, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,9 @@ interface NoteInputSectionProps {
   onGenerate: (keyword: string) => void;
   isLoading: boolean;
   onCancel?: () => void;
-  initialKeyword?: string;
+  /** 输入框内容（受控，便于切换历史记录时把主题回填到输入框） */
+  keyword: string;
+  onKeywordChange: (value: string) => void;
   imageCount: number;
   onImageCountChange: (n: number) => void;
   textLength: number;
@@ -28,7 +30,8 @@ export default function NoteInputSection({
   onGenerate,
   isLoading,
   onCancel,
-  initialKeyword = '',
+  keyword,
+  onKeywordChange,
   imageCount,
   onImageCountChange,
   textLength,
@@ -36,7 +39,7 @@ export default function NoteInputSection({
   styleId,
   onStyleChange,
 }: NoteInputSectionProps) {
-  const [keyword, setKeyword] = useState(initialKeyword);
+  const setKeyword = onKeywordChange;
 
   const handleSubmit = useCallback(
     (e: FormEvent) => {
@@ -54,7 +57,7 @@ export default function NoteInputSection({
     if (!isLoading) {
       onGenerate(random);
     }
-  }, [isLoading, onGenerate]);
+  }, [isLoading, onGenerate, setKeyword]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {

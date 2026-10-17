@@ -1,8 +1,9 @@
+import { useMemo } from 'react';
 import { Image } from '@/components/ui/image';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
-import { recordImages, type INoteRecord } from '@/data/note';
+import { buildNoteLabels, recordImages, type INoteRecord } from '@/data/note';
 
 interface HistorySectionProps {
   history: INoteRecord[];
@@ -19,6 +20,9 @@ export default function HistorySection({
   onClear,
   selectedId,
 }: HistorySectionProps) {
+  // 「日期+编号」由记录集合推导，同日编号唯一（旧记录也能补上正确编号）
+  const labels = useMemo(() => buildNoteLabels(history), [history]);
+
   if (history.length === 0) return null;
 
   const handleClear = () => {
@@ -60,14 +64,14 @@ export default function HistorySection({
                   />
                 </div>
                 <p className="text-xs text-muted-foreground mt-1.5 max-w-[96px] truncate">
-                  {record.keyword}
+                  {labels.get(record.id)}
                 </p>
               </button>
               <button
                 type="button"
                 onClick={() => onDelete(record.id)}
                 title="删除该记录"
-                className="absolute -top-2 -right-2 flex size-5 items-center justify-center rounded-full bg-white/90 text-muted-foreground shadow border border-border hover:text-destructive"
+                className="absolute top-1 right-1 z-10 flex size-5 items-center justify-center rounded-full bg-white/90 text-muted-foreground shadow border border-border hover:text-destructive"
               >
                 <Trash2 className="size-3" />
               </button>

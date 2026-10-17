@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { logger } from '@lark-apaas/client-toolkit-lite';
 import { toast } from 'sonner';
 import { Sparkles } from 'lucide-react';
@@ -10,6 +10,8 @@ import { useNoteHistory } from '@/hooks/use-note-history';
 import {
   DEFAULT_STYLE_ID,
   LOCAL_PRESETS,
+  buildNoteLabels,
+  makeNoteLabel,
   recordImages,
   type INoteRecord,
 } from '@/data/note';
@@ -46,6 +48,12 @@ export default function NoteGeneratorPage() {
 
   // 统一忙碌状态：整条生成 或 单张重生成 进行中
   const isBusy = isGenerating || regeneratingIndex !== null;
+
+  // 历史记录的「日期+编号」标签统一由记录集合推导，保证同日编号唯一（旧记录也能补上）
+  const noteLabels = useMemo(() => buildNoteLabels(history), [history]);
+  const currentLabel = currentRecord
+    ? (noteLabels.get(currentRecord.id) ?? makeNoteLabel(currentRecord.createdAt))
+    : '';
 
   const abortRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -119,15 +127,19 @@ export default function NoteGeneratorPage() {
           setIsOfflineCaption(true);
         }
 
+        // 主题描述可能很长，文件名与历史标题统一用「日期 + 当日编号」
+        // 编号不落库，展示时由 buildNoteLabels 按记录集合推导
+        const now = Date.now();
+
         const record: INoteRecord = {
-          id: `note_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+          id: `note_${now}_${Math.random().toString(36).slice(2, 8)}`,
           keyword: trimmed,
           imageUrls,
           title: title || `关于${trimmed}的图文笔记`,
           titles: titles.length > 0 ? titles : [title || `关于${trimmed}的图文笔记`],
           caption: caption || '今天也要认真生活，把喜欢的事记录下来～',
           tags: tags.length > 0 ? tags : ['图文笔记', '小红书', trimmed],
-          createdAt: Date.now(),
+          createdAt: now,
           styleId,
         };
 
@@ -229,7 +241,8 @@ export default function NoteGeneratorPage() {
             onGenerate={generateNoteAction}
             isLoading={isBusy}
             onCancel={handleCancel}
-            initialKeyword={currentKeyword}
+            keyword={currentKeyword}
+            onKeywordChange={setCurrentKeyword}
             imageCount={imageCount}
             onImageCountChange={setImageCount}
             textLength={textLength}
@@ -249,6 +262,7 @@ export default function NoteGeneratorPage() {
             onRegenerateImage={handleRegenerateImage}
             regeneratingIndex={regeneratingIndex}
             isOfflineCaption={isOfflineCaption}
+            noteLabel={currentLabel}
           />
         </section>
 

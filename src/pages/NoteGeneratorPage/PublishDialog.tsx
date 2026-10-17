@@ -15,13 +15,15 @@ import {
 import { exportRawImage, downloadDataUrlList } from '@/lib/image-composer';
 import { buildPublishParts, copyText, XHS_PUBLISH_URL, XHS_TITLE_LIMIT } from '@/lib/publish';
 import type { INoteRecord } from '@/data/note';
-import { recordImages } from '@/data/note';
+import { makeNoteLabel, recordImages } from '@/data/note';
 
 interface PublishDialogProps {
   record: INoteRecord;
   activeTitle: string;
   overrideCaption?: string;
   overrideTags?: string[];
+  /** 该记录的「日期+编号」短标签（由历史记录集合推导，保证唯一），用于文件名 */
+  noteLabel?: string;
 }
 
 export default function PublishDialog({
@@ -29,6 +31,7 @@ export default function PublishDialog({
   activeTitle,
   overrideCaption,
   overrideTags,
+  noteLabel,
 }: PublishDialogProps) {
   const [open, setOpen] = useState(false);
   const [prepping, setPrepping] = useState(false);
@@ -41,7 +44,8 @@ export default function PublishDialog({
   );
   const titleOver = parts.title.length > XHS_TITLE_LIMIT;
 
-  const safeKeyword = record.keyword.replace(/[\\/:*?"<>|]/g, '_');
+  // 主题描述可能很长，文件名统一用「日期 + 当日编号」
+  const resolvedLabel = noteLabel || makeNoteLabel(record.createdAt);
   const images = recordImages(record);
 
   // 导出全部配图并依次直接下载（每张单独保存为 PNG，不打包成 zip）
@@ -56,9 +60,9 @@ export default function PublishDialog({
       }
     }
     if (dataUrls.length === 0) return 0;
-    const ok = await downloadDataUrlList(dataUrls, `图文笔记_${safeKeyword}`);
+    const ok = await downloadDataUrlList(dataUrls, `图文笔记_${resolvedLabel}`);
     return ok;
-  }, [images, safeKeyword]);
+  }, [images, resolvedLabel]);
 
   const handleDownloadImage = useCallback(async () => {
     setPrepping(true);
@@ -202,7 +206,7 @@ export default function PublishDialog({
 
           <ol className="text-xs text-muted-foreground space-y-1 leading-relaxed list-decimal list-inside">
             <li>点下方按钮打开小红书创作者发布页（首次需扫码登录）。</li>
-            <li>选「上传图文」，把刚下载的配图（{images.length > 1 ? `图文笔记_${safeKeyword}.zip，解压后` : '图文笔记_' + safeKeyword + '.png'}）按顺序上传，保持原 3:4 比例。</li>
+            <li>选「上传图文」，把刚下载的配图（{images.length > 1 ? `图文笔记_${resolvedLabel}_1.png ~ 图文笔记_${resolvedLabel}_${images.length}.png` : `图文笔记_${resolvedLabel}.png`}）按顺序上传，保持原 3:4 比例。</li>
             <li>标题栏粘贴标题、正文框粘贴正文；确认无误后点「发布」。</li>
           </ol>
         </div>

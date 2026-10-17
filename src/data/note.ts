@@ -16,6 +16,44 @@ export interface INoteRecord {
   styleId?: string;
 }
 
+/** 日期戳：YYYYMMDD */
+export function formatDateStamp(ts: number): string {
+  const d = new Date(ts);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}`;
+}
+
+/**
+ * 「日期 + 当日编号」短标签，如 20261017_001。
+ * 用户输入的主题描述可能很长，不适合直接做文件名或历史标题，统一用这个短标签。
+ */
+export function makeNoteLabel(createdAt: number, seq = 1): string {
+  return `${formatDateStamp(createdAt)}_${String(Math.max(1, seq)).padStart(3, '0')}`;
+}
+
+/**
+ * 由整批历史记录推导出「日期+当日编号」标签（id -> label）。
+ *
+ * 序号不落库、每次按记录集合实时推导，好处是：
+ * - 同一批记录内编号必然唯一（不会像存 seq 那样因为并发/旧数据出现多条 _001）
+ * - 旧记录（没有 seq 字段）也能自动获得正确编号
+ * 同日记录按 createdAt 升序编号（最老的是 001），createdAt 相同时以 id 兜底保证顺序稳定。
+ */
+export function buildNoteLabels(records: INoteRecord[]): Map<string, string> {
+  const sorted = [...records].sort(
+    (a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id),
+  );
+  const counters = new Map<string, number>();
+  const labels = new Map<string, string>();
+  for (const record of sorted) {
+    const stamp = formatDateStamp(record.createdAt);
+    const next = (counters.get(stamp) ?? 0) + 1;
+    counters.set(stamp, next);
+    labels.set(record.id, `${stamp}_${String(next).padStart(3, '0')}`);
+  }
+  return labels;
+}
+
 /** 配图风格：用户可在界面选择，prompt 片段会拼进文生图提示词 */
 export interface INoteStyle {
   id: string;

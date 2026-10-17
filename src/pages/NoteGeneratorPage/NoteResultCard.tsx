@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Image } from '@/components/ui/image';
 import { composeNoteImage, downloadDataUrlList } from '@/lib/image-composer';
 import PublishDialog from './PublishDialog';
-import { getStyleLabel, recordImages, type INoteRecord } from '@/data/note';
+import { getStyleLabel, makeNoteLabel, recordImages, type INoteRecord } from '@/data/note';
 
 interface NoteResultCardProps {
   record: INoteRecord | null;
@@ -24,6 +24,8 @@ interface NoteResultCardProps {
   regeneratingIndex: number | null;
   /** 文案是否为本地离线兜底（非 AI 生成） */
   isOfflineCaption?: boolean;
+  /** 该记录的「日期+编号」短标签（由历史记录集合推导，保证唯一），用于文件名 */
+  noteLabel?: string;
 }
 
 export default function NoteResultCard({
@@ -34,6 +36,7 @@ export default function NoteResultCard({
   onRegenerateImage,
   regeneratingIndex,
   isOfflineCaption = false,
+  noteLabel,
 }: NoteResultCardProps) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [titleIdx, setTitleIdx] = useState(0);
@@ -65,13 +68,15 @@ export default function NoteResultCard({
 
   const titles = record?.titles?.length ? record.titles : record?.title ? [record.title] : [];
 
+  // 文件名使用「日期+编号」标签；缺失时按创建时间兜底
+  const resolvedLabel = noteLabel || (record ? makeNoteLabel(record.createdAt) : '');
+
   const handleDownload = useCallback(async () => {
     if (!record || !mainImage) return;
     setIsDownloading(true);
     try {
       const pages = await composeNoteImage(mainImage, editCaption, editTitle);
-      const safeKeyword = record.keyword.replace(/[\\/:*?"<>|]/g, '_');
-      const ok = await downloadDataUrlList(pages, `图文笔记_${safeKeyword}_${Date.now()}`);
+      const ok = await downloadDataUrlList(pages, `图文笔记_${resolvedLabel}`);
       if (ok) {
         toast.success(pages.length > 1 ? `已保存 ${pages.length} 页图文（直接下载，未压缩）` : '图片已保存');
       } else {
@@ -83,7 +88,7 @@ export default function NoteResultCard({
     } finally {
       setIsDownloading(false);
     }
-  }, [record, mainImage, editTitle]);
+  }, [record, mainImage, editTitle, editCaption, resolvedLabel]);
 
   // 空状态
   if (!record && !isGenerating) {
@@ -343,6 +348,7 @@ export default function NoteResultCard({
             activeTitle={editTitle}
             overrideCaption={editCaption}
             overrideTags={editTags}
+            noteLabel={resolvedLabel}
           />
         </div>
       )}
