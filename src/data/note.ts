@@ -18,6 +18,11 @@ export interface INoteRecord {
   imageCount?: number;
   /** 生成时选择的正文目标字数（切换历史时回写，旧记录没有） */
   textLength?: number;
+  /**
+   * 当日编号（从 1 开始），与日期一起组成「日期+编号」短标签。
+   * 创建时即固定写入记录：删除其它记录不会导致编号重排，编号也不会被复用。
+   */
+  seq?: number;
 }
 
 /** 日期戳：YYYYMMDD */
@@ -36,26 +41,60 @@ export function makeNoteLabel(createdAt: number, seq = 1): string {
 }
 
 /**
- * 由整批历史记录推导出「日期+当日编号」标签（id -> label）。
+ * 计算新记录在当日应使用的编号：取同日已有编号的最大值 + 1。
  *
- * 序号不落库、每次按记录集合实时推导，好处是：
- * - 同一批记录内编号必然唯一（不会像存 seq 那样因为并发/旧数据出现多条 _001）
- * - 旧记录（没有 seq 字段）也能自动获得正确编号
- * 同日记录按 createdAt 升序编号（最老的是 001），createdAt 相同时以 id 兜底保证顺序稳定。
+ * 用「最大值 + 1」而不是「条数 + 1」，这样删除记录后编号不会被复用、也不会重排，
+ * 新记录永远接在当日已用过的最大编号之后。
  */
-export function buildNoteLabels(records: INoteRecord[]): Map<string, string> {
-  const sorted = [...records].sort(
+export function nextSeqForDay(records: INoteRecord[], createdAt: number): number {
+  const stamp = formatDateStamp(createdAt);
+  let max = 0;
+  for (const record of records) {
+    if (formatDateStamp(record.createdAt) !== stamp) continue;
+    const seq = typeof record.seq === 'number' && record.seq > 0 ? record.seq : 0;
+    if (seq > max) max = seq;
+  }
+  return max + 1;
+}
+
+/**
+ * 为缺少 seq 的旧记录一次性补编号（按同日 createdAt 升序，接在当日已有最大编号之后）。
+ * 补齐后编号就固定下来，后续增删不会再变化。
+ */
+export function backfillSeq(records: INoteRecord[]): {
+  records: INoteRecord[];
+  changed: boolean;
+} {
+  const missing = records.filter((r) => typeof r.seq !== 'number' || r.seq <= 0);
+  if (missing.length === 0) return { records, changed: false };
+
+  // 先记录各日已使用的最大编号
+  const counters = new Map<string, number>();
+  for (const record of records) {
+    if (typeof record.seq === 'number' && record.seq > 0) {
+      const stamp = formatDateStamp(record.createdAt);
+      counters.set(stamp, Math.max(counters.get(stamp) ?? 0, record.seq));
+    }
+  }
+
+  const ordered = [...missing].sort(
     (a, b) => a.createdAt - b.createdAt || a.id.localeCompare(b.id),
   );
-  const counters = new Map<string, number>();
-  const labels = new Map<string, string>();
-  for (const record of sorted) {
+  const assigned = new Map<string, number>();
+  for (const record of ordered) {
     const stamp = formatDateStamp(record.createdAt);
     const next = (counters.get(stamp) ?? 0) + 1;
     counters.set(stamp, next);
-    labels.set(record.id, `${stamp}_${String(next).padStart(3, '0')}`);
+    assigned.set(record.id, next);
   }
-  return labels;
+
+  return {
+    records: records.map((r) => {
+      const seq = assigned.get(r.id);
+      return seq ? { ...r, seq } : r;
+    }),
+    changed: true,
+  };
 }
 
 /** 配图风格：用户可在界面选择，prompt 片段会拼进文生图提示词 */

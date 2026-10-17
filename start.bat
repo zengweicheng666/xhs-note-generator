@@ -12,7 +12,7 @@ if not exist "node_modules\" (
 )
 echo [INFO] Starting Vite dev server at http://localhost:5173
 echo [INFO] Press Ctrl+C to stop.
-start "" cmd /c "timeout /t 6 /nobreak >nul && start "" http://localhost:5173"
+start "" cmd /c "timeout /t 6 /nobreak >nul && start "" http://localhost:8080"
 call node_modules\.bin\vite --host
 if errorlevel 1 (
   echo [ERROR] Failed to start Vite.

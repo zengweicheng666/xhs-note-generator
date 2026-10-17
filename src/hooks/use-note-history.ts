@@ -1,6 +1,6 @@
 import { scopedStorage } from '@lark-apaas/client-toolkit-lite';
 import { useState, useEffect, useCallback } from 'react';
-import type { INoteRecord } from '@/data/note';
+import { backfillSeq, type INoteRecord } from '@/data/note';
 
 const STORAGE_KEY = '__app_note_generator_history';
 const MAX_HISTORY = 20;
@@ -26,7 +26,12 @@ function saveHistory(records: INoteRecord[]) {
 }
 
 export function useNoteHistory() {
-  const [history, setHistory] = useState<INoteRecord[]>(() => loadHistory());
+  const [history, setHistory] = useState<INoteRecord[]>(() => {
+    // 旧记录没有 seq 字段，加载时一次性补全并写回，之后编号固定不再变化
+    const { records, changed } = backfillSeq(loadHistory());
+    if (changed) saveHistory(records);
+    return records;
+  });
 
   useEffect(() => {
     saveHistory(history);

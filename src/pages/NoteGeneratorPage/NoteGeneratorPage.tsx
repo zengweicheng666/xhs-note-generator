@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { logger } from '@lark-apaas/client-toolkit-lite';
 import { toast } from 'sonner';
 import { Sparkles } from 'lucide-react';
@@ -15,8 +15,8 @@ import { useNoteHistory } from '@/hooks/use-note-history';
 import {
   DEFAULT_STYLE_ID,
   LOCAL_PRESETS,
-  buildNoteLabels,
   makeNoteLabel,
+  nextSeqForDay,
   recordImages,
   type INoteRecord,
 } from '@/data/note';
@@ -54,10 +54,9 @@ export default function NoteGeneratorPage() {
   // 统一忙碌状态：整条生成 或 单张重生成 进行中
   const isBusy = isGenerating || regeneratingIndex !== null;
 
-  // 历史记录的「日期+编号」标签统一由记录集合推导，保证同日编号唯一（旧记录也能补上）
-  const noteLabels = useMemo(() => buildNoteLabels(history), [history]);
+  // 编号在创建时已固定写入记录，直接读取即可（删除其它记录不会重排）
   const currentLabel = currentRecord
-    ? (noteLabels.get(currentRecord.id) ?? makeNoteLabel(currentRecord.createdAt))
+    ? makeNoteLabel(currentRecord.createdAt, currentRecord.seq)
     : '';
 
   const abortRef = useRef(false);
@@ -133,8 +132,9 @@ export default function NoteGeneratorPage() {
         }
 
         // 主题描述可能很长，文件名与历史标题统一用「日期 + 当日编号」
-        // 编号不落库，展示时由 buildNoteLabels 按记录集合推导
+        // 编号在创建时固定下来：取同日已有最大编号 +1，删除记录不会导致重排或复用
         const now = Date.now();
+        const seq = nextSeqForDay(history, now);
 
         const record: INoteRecord = {
           id: `note_${now}_${Math.random().toString(36).slice(2, 8)}`,
@@ -148,6 +148,7 @@ export default function NoteGeneratorPage() {
           styleId,
           imageCount: count,
           textLength,
+          seq,
         };
 
         setCurrentRecord(record);
@@ -164,7 +165,7 @@ export default function NoteGeneratorPage() {
         setIsGenerating(false);
       }
     },
-    [isBusy, addRecord, imageCount, textLength, styleId],
+    [isBusy, addRecord, imageCount, textLength, styleId, history],
   );
 
   // 取消当前生成
