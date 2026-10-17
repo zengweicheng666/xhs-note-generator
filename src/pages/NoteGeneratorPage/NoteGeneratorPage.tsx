@@ -2,7 +2,12 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { logger } from '@lark-apaas/client-toolkit-lite';
 import { toast } from 'sonner';
 import { Sparkles } from 'lucide-react';
-import NoteInputSection, { DEFAULT_TEXT_LENGTH } from './NoteInputSection';
+import NoteInputSection, {
+  DEFAULT_TEXT_LENGTH,
+  MAX_IMAGE_COUNT,
+  MAX_TEXT_LENGTH,
+  MIN_TEXT_LENGTH,
+} from './NoteInputSection';
 import NoteResultCard from './NoteResultCard';
 import HistorySection from './HistorySection';
 import SettingsDialog from './SettingsDialog';
@@ -141,6 +146,8 @@ export default function NoteGeneratorPage() {
           tags: tags.length > 0 ? tags : ['图文笔记', '小红书', trimmed],
           createdAt: now,
           styleId,
+          imageCount: count,
+          textLength,
         };
 
         setCurrentRecord(record);
@@ -209,8 +216,21 @@ export default function NoteGeneratorPage() {
       if (isBusy) return; // 生成/重生成进行中禁止切换，避免状态错乱
       setCurrentRecord(record);
       setCurrentKeyword(record.keyword);
+
+      // 把该记录的三个生成参数回写到控件（旧记录缺字段时按内容兜底）
+      const restoredCount = record.imageCount ?? (recordImages(record).length || 1);
+      setImageCount(Math.min(Math.max(1, restoredCount), MAX_IMAGE_COUNT));
+
+      const fallbackLen = record.caption ? record.caption.length : textLength;
+      const restoredLen = record.textLength ?? fallbackLen;
+      setTextLength(Math.min(Math.max(MIN_TEXT_LENGTH, restoredLen), MAX_TEXT_LENGTH));
+
+      setStyleId(record.styleId ?? DEFAULT_STYLE_ID);
+
+      // 该记录的文案是否为离线兜底，随记录一起切换展示
+      setIsOfflineCaption(false);
     },
-    [isBusy],
+    [isBusy, textLength],
   );
 
   return (

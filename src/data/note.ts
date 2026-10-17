@@ -14,6 +14,10 @@ export interface INoteRecord {
   createdAt: number;
   /** 生成配图时使用的风格 id（重生成时沿用，保证风格一致；旧记录可能没有） */
   styleId?: string;
+  /** 生成时选择的生图数量（切换历史时回写，旧记录没有） */
+  imageCount?: number;
+  /** 生成时选择的正文目标字数（切换历史时回写，旧记录没有） */
+  textLength?: number;
 }
 
 /** 日期戳：YYYYMMDD */
