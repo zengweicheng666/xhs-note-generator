@@ -63,9 +63,15 @@ function renderImagePage(img: HTMLImageElement, title: string, captionChunk: str
   wrapText(ctx, title, 60, titleY, PAGE_W - 120, 60, 2);
 
   const captionY = titleY + 130;
-  ctx.fillStyle = '#444444';
-  ctx.font = '30px "PingFang SC", "Microsoft YaHei", sans-serif';
-  wrapText(ctx, captionChunk, 60, captionY, PAGE_W - 120, 46, 7);
+  drawTextBlock(ctx, captionChunk, {
+    x: 60,
+    y: captionY,
+    maxWidth: PAGE_W - 120,
+    lineHeight: 44,
+    maxBottom: PAGE_H - 90,
+    font: '30px "PingFang SC", "Microsoft YaHei", sans-serif',
+    color: '#444444',
+  });
 
   drawWatermark(ctx);
   return canvas.toDataURL('image/png');
@@ -87,9 +93,15 @@ function renderTextPage(title: string, captionChunk: string, pageNo: number, tot
   ctx.font = 'bold 40px "PingFang SC", "Microsoft YaHei", sans-serif';
   wrapText(ctx, title, 60, 90, PAGE_W - 120, 56, 2);
 
-  ctx.fillStyle = '#444444';
-  ctx.font = '30px "PingFang SC", "Microsoft YaHei", sans-serif';
-  wrapText(ctx, captionChunk, 60, 220, PAGE_W - 120, 46, 26);
+  drawTextBlock(ctx, captionChunk, {
+    x: 60,
+    y: 230,
+    maxWidth: PAGE_W - 120,
+    lineHeight: 46,
+    maxBottom: PAGE_H - 130,
+    font: '30px "PingFang SC", "Microsoft YaHei", sans-serif',
+    color: '#444444',
+  });
 
   ctx.fillStyle = '#bdbdbd';
   ctx.textAlign = 'center';
@@ -245,6 +257,80 @@ function drawImageCover(
   }
 
   ctx.drawImage(img, sx, sy, sw, sh, x, y, w, h);
+}
+
+/** 按宽度把「一段纯文本」换行（不处理 \n），返回行数组 */
+function wrapParagraph(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string[] {
+  const chars = text.split('');
+  const lines: string[] = [];
+  let line = '';
+  for (const ch of chars) {
+    const test = line + ch;
+    if (ctx.measureText(test).width > maxWidth && line !== '') {
+      lines.push(line);
+      line = ch;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+/**
+ * 段落感知的文本块绘制（修复排版混乱）：
+ * - 尊重正文里的 \n 换行，段落之间留半行间距，不再把所有字挤成一坨
+ * - 段落内按宽度自动换行，绘制到 maxBottom 为止，空间不足时最后一行加省略号
+ */
+function drawTextBlock(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  opts: {
+    x: number;
+    y: number;
+    maxWidth: number;
+    lineHeight: number;
+    maxBottom: number;
+    font: string;
+    color: string;
+  },
+) {
+  ctx.save();
+  ctx.font = opts.font;
+  ctx.fillStyle = opts.color;
+  ctx.textAlign = 'left';
+
+  const gap = opts.lineHeight * 0.5;
+  const paragraphs = String(text).split('\n');
+  let y = opts.y;
+  let lastWasGap = false;
+
+  for (const para of paragraphs) {
+    const p = para.trim();
+    if (!p) {
+      // 空行只补一次间距，避免连续空行浪费版面
+      if (!lastWasGap && y > opts.y) {
+        y += gap;
+        lastWasGap = true;
+      }
+      continue;
+    }
+    for (const line of wrapParagraph(ctx, p, opts.maxWidth)) {
+      if (y + opts.lineHeight > opts.maxBottom) {
+        let last = line;
+        while (last.length > 1 && ctx.measureText(`${last}…`).width > opts.maxWidth) {
+          last = last.slice(0, -1);
+        }
+        ctx.fillText(`${last}…`, opts.x, y);
+        ctx.restore();
+        return;
+      }
+      ctx.fillText(line, opts.x, y);
+      y += opts.lineHeight;
+      lastWasGap = false;
+    }
+  }
+  ctx.restore();
 }
 
 function wrapText(
