@@ -1,5 +1,4 @@
 import { logger } from '@lark-apaas/client-toolkit-lite';
-import JSZip from 'jszip';
 
 const PAGE_W = 1080;
 const PAGE_H = 1440; // 3:4
@@ -322,40 +321,6 @@ export async function downloadDataUrlList(pages: string[], baseName: string): Pr
     }
   }
   return ok;
-}
-
-/**
- * 把多张 dataURL 打包成一个 zip 一次性下载，避免浏览器「一次性多下载」弹窗。
- * 单张时直接下载，多张时打包。返回是否成功。
- */
-export async function downloadDataUrlsAsZip(
-  dataUrls: string[],
-  baseName: string,
-): Promise<boolean> {
-  try {
-    if (dataUrls.length === 1) {
-      downloadImage(dataUrls[0], `${baseName}.png`);
-      return true;
-    }
-    const zip = new JSZip();
-    dataUrls.forEach((d, i) => {
-      const base64 = d.split(',')[1] ?? '';
-      zip.file(`${baseName}_${i + 1}.png`, base64, { base64: true });
-    });
-    const blob = await zip.generateAsync({ type: 'blob' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${baseName}.zip`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    return true;
-  } catch (error) {
-    logger.error('打包 zip 失败:', String(error));
-    return false;
-  }
 }
 
 /**

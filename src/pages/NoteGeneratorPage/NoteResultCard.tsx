@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Image } from '@/components/ui/image';
-import { composeNoteImage, downloadDataUrlsAsZip } from '@/lib/image-composer';
+import { composeNoteImage, downloadDataUrlList } from '@/lib/image-composer';
 import PublishDialog from './PublishDialog';
 import { recordImages, type INoteRecord } from '@/data/note';
 
@@ -71,9 +71,9 @@ export default function NoteResultCard({
     try {
       const pages = await composeNoteImage(mainImage, editCaption, editTitle);
       const safeKeyword = record.keyword.replace(/[\\/:*?"<>|]/g, '_');
-      const ok = await downloadDataUrlsAsZip(pages, `图文笔记_${safeKeyword}_${Date.now()}`);
+      const ok = await downloadDataUrlList(pages, `图文笔记_${safeKeyword}_${Date.now()}`);
       if (ok) {
-        toast.success(pages.length > 1 ? `已保存 ${pages.length} 页图文（长文已分页打包）` : '图片已保存');
+        toast.success(pages.length > 1 ? `已保存 ${pages.length} 页图文（直接下载，未压缩）` : '图片已保存');
       } else {
         toast.error('图片保存失败，请重试');
       }

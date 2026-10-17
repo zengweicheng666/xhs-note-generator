@@ -12,7 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { exportRawImage, downloadDataUrlsAsZip } from '@/lib/image-composer';
+import { exportRawImage, downloadDataUrlList } from '@/lib/image-composer';
 import { buildPublishParts, copyText, XHS_PUBLISH_URL, XHS_TITLE_LIMIT } from '@/lib/publish';
 import type { INoteRecord } from '@/data/note';
 import { recordImages } from '@/data/note';
@@ -44,7 +44,7 @@ export default function PublishDialog({
   const safeKeyword = record.keyword.replace(/[\\/:*?"<>|]/g, '_');
   const images = recordImages(record);
 
-  // 导出全部配图并打包下载（多张时打 zip，避免浏览器多下载弹窗）
+  // 导出全部配图并依次直接下载（每张单独保存为 PNG，不打包成 zip）
   const downloadAllImages = useCallback(async (): Promise<number> => {
     if (images.length === 0) return 0;
     const dataUrls: string[] = [];
@@ -56,8 +56,8 @@ export default function PublishDialog({
       }
     }
     if (dataUrls.length === 0) return 0;
-    const ok = await downloadDataUrlsAsZip(dataUrls, `图文笔记_${safeKeyword}`);
-    return ok ? dataUrls.length : 0;
+    const ok = await downloadDataUrlList(dataUrls, `图文笔记_${safeKeyword}`);
+    return ok;
   }, [images, safeKeyword]);
 
   const handleDownloadImage = useCallback(async () => {
