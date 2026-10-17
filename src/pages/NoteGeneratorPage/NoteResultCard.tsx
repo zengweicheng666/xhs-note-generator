@@ -229,7 +229,7 @@ export default function NoteResultCard({
               {titles.length > 1 && (
                 <div className="space-y-1.5 pt-0.5">
                   <p className="text-xs text-muted-foreground">备选标题，点击填入：</p>
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-col gap-1.5">
                     {titles.map((t, i) => (
                       <button
                         key={`${t}-${i}`}
@@ -239,7 +239,7 @@ export default function NoteResultCard({
                           setEditTitle(t);
                         }}
                         className={
-                          'text-sm px-2.5 py-1 rounded-md border transition-colors ' +
+                          'w-full text-left text-sm px-2.5 py-1 rounded-md border transition-colors ' +
                           (i === titleIdx
                             ? 'border-primary/50 bg-primary/5 text-foreground font-medium'
                             : 'border-border/60 text-muted-foreground hover:bg-muted/50')
