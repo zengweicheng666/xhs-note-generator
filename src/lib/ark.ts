@@ -30,7 +30,7 @@ async function requestImageOnce(
 ): Promise<string> {
   const { imageModel } = getSettings()
   const parts = [
-    '极简清新插画风格的小红书笔记配图，纯色或白色背景，',
+    '极简清新插画风格的小红书笔记配图，纯白背景，',
     '主体明确、画面干净简洁，主题相关，',
     `主题关键词：${keyword}，适合作为小红书图文笔记封面，`,
     '构图居中、留白充足，无任何文字，整体治愈柔和。',
@@ -86,9 +86,9 @@ export async function generateImage(
   signal?: AbortSignal,
 ): Promise<string[]> {
   const total = Math.max(1, Math.min(Math.floor(count) || 1, 8))
-  // 每批加随机变化，保证每次「换一换」视觉差异更大
+  // 每批加随机变化，保证每次「换一换」视觉差异更大（背景保持纯白，避免不同张背景色不一致）
   const seed = Math.floor(Math.random() * 1_000_000)
-  const variation = `整体基调保持清新治愈，可自由发挥构图与配色（批次变化 ${seed}）。`
+  const variation = `整体基调保持清新治愈，保持纯白背景不变，可自由发挥构图与主体配色（批次变化 ${seed}）。`
   const tasks = Array.from({ length: total }, (_, i) =>
     withRetry(() => requestImageOnce(keyword, i + 1, total, variation, signal), signal),
   )
@@ -109,9 +109,11 @@ export async function generateImage(
  */
 export async function regenerateImage(keyword: string): Promise<string> {
   const seed = Math.floor(Math.random() * 1_000_000)
+  // 关键：明确要求「保持纯白背景、风格不变」，仅在构图/视角/元素上变化，
+  // 否则模型会把背景也换掉，导致重生成图片与首次生成的白色背景不一致。
   const hint =
-    `请重新创作一张完全不同的版本：更换构图、视角、配色和背景元素（变化编号 ${seed}），` +
-    '与之前的版本在视觉上明显区别。'
+    `请重新创作一张版本（变化编号 ${seed}）：保持纯白背景、画面干净简洁的风格不变，` +
+    '仅在构图、视角、主体摆放或细节元素上做出区别，与之前的版本布局不同但整体调性一致。'
   return requestImageOnce(keyword, 1, 1, hint)
 }
 
