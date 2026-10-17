@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings, Eye, EyeOff, KeyRound } from 'lucide-react';
+import { Settings, Eye, EyeOff, KeyRound, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,11 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { getSettings, saveSettings, type IArkSettings } from '@/lib/settings';
+
+/** 火山方舟控制台入口（新窗口打开） */
+const ARK_CONSOLE_URL = 'https://console.volcengine.com/ark';
+/** 控制台 · API Key 管理页 */
+const ARK_APIKEY_URL = 'https://console.volcengine.com/ark/region:ark+cn-beijing/apikey';
 
 export default function SettingsDialog() {
   const [open, setOpen] = useState(false);
@@ -101,9 +106,26 @@ export default function SettingsDialog() {
             />
           </div>
 
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            在火山方舟控制台「API Key 管理」创建 Key，并在「模型广场」开通对应模型后才能调用。
-          </p>
+          {/* 火山方舟控制台快捷入口 */}
+          <div className="rounded-lg border border-border/60 bg-muted/40 p-3 space-y-2">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              还没有 API Key？去火山方舟控制台创建 Key，并在「模型广场 / 推理接入点」开通对应模型后才能调用。
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline" size="sm" className="gap-1.5">
+                <a href={ARK_APIKEY_URL} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="size-3.5" />
+                  API Key 管理
+                </a>
+              </Button>
+              <Button asChild variant="ghost" size="sm" className="gap-1.5">
+                <a href={ARK_CONSOLE_URL} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="size-3.5" />
+                  打开方舟控制台
+                </a>
+              </Button>
+            </div>
+          </div>
         </div>
 
         <DialogFooter>
