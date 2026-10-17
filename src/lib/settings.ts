@@ -6,7 +6,7 @@ export interface IArkSettings {
   textModel: string
 }
 
-const STORAGE_KEY = 'meme_ark_settings_v1'
+const STORAGE_KEY = 'note_ark_settings_v1'
 
 const ENV_IMAGE_MODEL =
   (import.meta.env.VITE_ARK_IMAGE_MODEL as string) || 'doubao-seedream-5-0-260128'

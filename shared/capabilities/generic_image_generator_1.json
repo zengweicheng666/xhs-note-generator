@@ -1,0 +1,32 @@
+{
+  "id": "generic_image_generator_1",
+  "pluginKey": "@official-plugins/ai-text-to-image",
+  "pluginVersion": "1.0.21",
+  "name": "通用配图生成",
+  "description": "根据主题关键词生成通用风格的小红书笔记配图，支持3:4和1:1两种比例，风格为极简清新插画、纯色或白色背景、主体明确、画面干净。",
+  "icon": "",
+  "paramsSchema": {
+    "type": "object",
+    "properties": {
+      "topic_keyword": {
+        "type": "string",
+        "description": "生成配图的主题关键词，如穿搭、美食、旅行、护肤、健身等"
+      },
+      "image_ratio": {
+        "type": "string",
+        "description": "图片比例，支持的值：1:1、3:4"
+      }
+    },
+    "required": [
+      "topic_keyword"
+    ]
+  },
+  "formValue": {
+    "prompt": "请生成一张与主题相关的通用风格小红书笔记配图，主题关键词：{{input.topic_keyword}}。风格要求：极简清新插画风格，主体明确，画面干净简洁，纯色或白色背景，适合作为小红书图文笔记封面，构图居中、留白充足，无多余文字。",
+    "ratio": "{{input.image_ratio}}",
+    "watermark": false
+  },
+  "createdAt": 1789308748018,
+  "updatedAt": 1789308748018,
+  "createdBy": 7576680575872797896
+}

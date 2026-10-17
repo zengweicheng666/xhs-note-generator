@@ -1,4 +1,4 @@
-import type { IMemeRecord } from '@/data/meme';
+import type { INoteRecord } from '@/data/note';
 
 /** 小红书创作者中心发布页（图文） */
 export const XHS_PUBLISH_URL =
@@ -13,11 +13,20 @@ export interface IPublishParts {
   body: string;
 }
 
-/** 把当前记录组装成小红书发布所需的标题和正文 */
-export function buildPublishParts(record: IMemeRecord, activeTitle: string): IPublishParts {
+export interface IPublishOverride {
+  caption?: string;
+  tags?: string[];
+}
+
+/** 把当前记录组装成小红书发布所需的标题和正文（caption/tags 可用编辑后的值覆盖） */
+export function buildPublishParts(
+  record: INoteRecord,
+  activeTitle: string,
+  override?: IPublishOverride,
+): IPublishParts {
   const title = (activeTitle || record.title || '').trim();
-  const caption = (record.caption || '').trim();
-  const tags = (record.tags || []).map((t) => `#${String(t).replace(/^#/, '').trim()}`).join(' ');
+  const caption = (override?.caption ?? record.caption ?? '').trim();
+  const tags = (override?.tags ?? record.tags ?? []).map((t) => `#${String(t).replace(/^#/, '').trim()}`).join(' ');
   const body = [caption, tags].filter(Boolean).join('\n\n');
   return { title, body };
 }

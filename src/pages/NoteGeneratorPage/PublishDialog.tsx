@@ -12,44 +12,76 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { exportRawImage, downloadImage } from '@/lib/image-composer';
+import { exportRawImage, downloadDataUrlsAsZip } from '@/lib/image-composer';
 import { buildPublishParts, copyText, XHS_PUBLISH_URL, XHS_TITLE_LIMIT } from '@/lib/publish';
-import type { IMemeRecord } from '@/data/meme';
+import type { INoteRecord } from '@/data/note';
+import { recordImages } from '@/data/note';
 
 interface PublishDialogProps {
-  record: IMemeRecord;
+  record: INoteRecord;
   activeTitle: string;
+  overrideCaption?: string;
+  overrideTags?: string[];
 }
 
-export default function PublishDialog({ record, activeTitle }: PublishDialogProps) {
+export default function PublishDialog({
+  record,
+  activeTitle,
+  overrideCaption,
+  overrideTags,
+}: PublishDialogProps) {
   const [open, setOpen] = useState(false);
   const [prepping, setPrepping] = useState(false);
   const [preparedId, setPreparedId] = useState<string | null>(null);
   const [copied, setCopied] = useState<'title' | 'body' | null>(null);
 
   const parts = useMemo(
-    () => buildPublishParts(record, activeTitle),
-    [record, activeTitle],
+    () => buildPublishParts(record, activeTitle, { caption: overrideCaption, tags: overrideTags }),
+    [record, activeTitle, overrideCaption, overrideTags],
   );
   const titleOver = parts.title.length > XHS_TITLE_LIMIT;
 
   const safeKeyword = record.keyword.replace(/[\\/:*?"<>|]/g, '_');
+  const images = recordImages(record);
+
+  // 导出全部配图并打包下载（多张时打 zip，避免浏览器多下载弹窗）
+  const downloadAllImages = useCallback(async (): Promise<number> => {
+    if (images.length === 0) return 0;
+    const dataUrls: string[] = [];
+    for (let i = 0; i < images.length; i++) {
+      try {
+        dataUrls.push(await exportRawImage(images[i]));
+      } catch (error) {
+        logger.error(`导出第 ${i + 1} 张配图失败:`, String(error));
+      }
+    }
+    if (dataUrls.length === 0) return 0;
+    const ok = await downloadDataUrlsAsZip(dataUrls, `图文笔记_${safeKeyword}`);
+    return ok ? dataUrls.length : 0;
+  }, [images, safeKeyword]);
 
   const handleDownloadImage = useCallback(async () => {
     setPrepping(true);
     try {
-      const dataUrl = await exportRawImage(record.imageUrl);
-      downloadImage(dataUrl, `自嘲熊_${safeKeyword}.png`);
-      toast.success('配图已下载（与预览一致的 3:4 竖图）');
+      const ok = await downloadAllImages();
+      if (ok > 0) {
+        toast.success(
+          images.length > 1
+            ? `已打包下载 ${ok} 张配图（zip，与预览一致的 3:4 竖图）`
+            : '已下载配图（与预览一致的 3:4 竖图）',
+        );
+      } else {
+        toast.error('配图导出失败，请改用「下载图片」');
+      }
     } catch (error) {
       logger.error('导出配图失败:', String(error));
-      toast.error('配图导出失败，请改用「下载图片」');
+      toast.error('配图导出失败，请重试');
     } finally {
       setPrepping(false);
     }
-  }, [record.imageUrl, safeKeyword]);
+  }, [downloadAllImages, images.length]);
 
-  // 打开弹窗时：自动复制正文 + 下载配图（两者互不影响，失败可手动）
+  // 打开弹窗时：自动复制正文 + 下载全部配图（两者互不影响，失败可手动）
   const handleOpen = useCallback(
     async (nextOpen: boolean) => {
       setOpen(nextOpen);
@@ -64,27 +96,25 @@ export default function PublishDialog({ record, activeTitle }: PublishDialogProp
         } catch (error) {
           logger.warn('自动复制正文失败:', String(error));
         }
-        // 再下载配图
-        let downloaded = false;
+        // 再下载全部配图
+        let downloaded = 0;
         try {
-          const dataUrl = await exportRawImage(record.imageUrl);
-          downloadImage(dataUrl, `自嘲熊_${safeKeyword}.png`);
-          downloaded = true;
+          downloaded = await downloadAllImages();
         } catch (error) {
           logger.error('导出配图失败:', String(error));
         }
-        if (downloaded && copied) {
-          toast.success('配图已下载，正文已复制，可直接粘贴');
-        } else if (downloaded) {
-          toast.success('配图已下载，正文可手动复制');
+        if (downloaded > 0 && copied) {
+          toast.success(`已下载 ${downloaded} 张配图，正文已复制，可直接粘贴`);
+        } else if (downloaded > 0) {
+          toast.success(`已下载 ${downloaded} 张配图，正文可手动复制`);
         } else if (copied) {
-          toast.success('正文已复制，配图可点「下载」');
+          toast.success('正文已复制，配图可点「下载全部」');
         } else {
           toast.error('自动准备失败，可手动下载/复制');
         }
       }
     },
-    [preparedId, record.id, record.imageUrl, safeKeyword, parts.body],
+    [preparedId, record.id, downloadAllImages, parts.body],
   );
 
   const handleCopy = useCallback(
@@ -132,12 +162,12 @@ export default function PublishDialog({ record, activeTitle }: PublishDialogProp
           <div className="flex items-center gap-3 rounded-lg border border-border/60 p-3">
             <ImageIcon className="size-5 text-muted-foreground shrink-0" />
             <div className="flex-1 text-sm">
-              <p className="font-medium">1. 配图</p>
-              <p className="text-xs text-muted-foreground">已自动下载；没有的话点右侧重下</p>
+              <p className="font-medium">1. 配图（共 {images.length} 张）</p>
+              <p className="text-xs text-muted-foreground">已自动下载全部；没有的话点右侧重下</p>
             </div>
             <Button size="sm" variant="secondary" onClick={handleDownloadImage} disabled={prepping}>
               <Download className="size-3.5 mr-1" />
-              {prepping ? '导出中' : '下载'}
+              {prepping ? '导出中' : '下载全部'}
             </Button>
           </div>
 
@@ -172,7 +202,7 @@ export default function PublishDialog({ record, activeTitle }: PublishDialogProp
 
           <ol className="text-xs text-muted-foreground space-y-1 leading-relaxed list-decimal list-inside">
             <li>点下方按钮打开小红书创作者发布页（首次需扫码登录）。</li>
-            <li>选「上传图文」，把刚下载的 自嘲熊_{safeKeyword}.png 上传，保持原 3:4 比例。</li>
+            <li>选「上传图文」，把刚下载的配图（{images.length > 1 ? `图文笔记_${safeKeyword}.zip，解压后` : '图文笔记_' + safeKeyword + '.png'}）按顺序上传，保持原 3:4 比例。</li>
             <li>标题栏粘贴标题、正文框粘贴正文；确认无误后点「发布」。</li>
           </ol>
         </div>

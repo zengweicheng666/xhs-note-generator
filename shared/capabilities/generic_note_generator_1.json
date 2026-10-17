@@ -1,0 +1,48 @@
+{
+  "id": "generic_note_generator_1",
+  "pluginKey": "@official-plugins/ai-text-to-json",
+  "pluginVersion": "1.0.26",
+  "name": "通用笔记文案生成",
+  "description": "根据主题关键词生成结构化的小红书笔记文案：包含标题、配文、标签数组。风格为口语化、有干货、有共鸣的小红书爆款文案。",
+  "icon": "",
+  "paramsSchema": {
+    "type": "object",
+    "properties": {
+      "topic_keyword": {
+        "type": "string",
+        "description": "用户输入的主题关键词，如：穿搭、美食、旅行、护肤、健身、读书等"
+      }
+    },
+    "required": [
+      "topic_keyword"
+    ]
+  },
+  "formValue": {
+    "jsonStructure": [
+      {
+        "paramDescription": "小红书笔记标题，15-25字，包含1-2个相关emoji，要有悬念或共鸣感",
+        "name": "title",
+        "paramType": "String"
+      },
+      {
+        "paramType": "String",
+        "paramDescription": "笔记正文内容，200-300字，分3-5个短段落，适当使用emoji，口语化表达，有干货和共鸣点",
+        "name": "content"
+      },
+      {
+        "name": "tags",
+        "paramType": "Array",
+        "paramDescription": "小红书标签数组，5-8个标签，包含主题相关关键词和热门话题，items schema: {tag: string(标签内容)}"
+      }
+    ],
+    "modelID": "2015",
+    "modelParams": {
+      "maxTokens": 8192,
+      "temperature": 0.5
+    },
+    "prompt": "你是一位擅长小红书爆款文案创作的资深写手，擅长把各种主题写成有吸引力、有干货、有共鸣的笔记内容。\n\n请根据以下主题关键词生成一篇小红书笔记：\n主题关键词：{{input.topic_keyword}}\n\n风格要求：\n1. 核心风格：口语化、有干货、有共鸣，像真人分享一样自然\n2. 语言要接地气，多用网络热词和口语化表达\n3. 内容要真实有用，能引发读者共鸣或提供价值\n4. 避免太过正式或书面化的表达"
+  },
+  "createdAt": 1789308752630,
+  "updatedAt": 1789308752630,
+  "createdBy": 7576680575872797896
+}

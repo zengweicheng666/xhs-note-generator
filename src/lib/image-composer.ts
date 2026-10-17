@@ -1,73 +1,218 @@
 import { logger } from '@lark-apaas/client-toolkit-lite';
+import JSZip from 'jszip';
+
+const PAGE_W = 1080;
+const PAGE_H = 1440; // 3:4
+// 单页可放置的正文字符数（按画布估算，留足余量）
+const CHARS_PER_PAGE = 200;
+
+/** 已加载图片缓存，避免导出/合成时重复拉取原图 */
+const imageCache = new Map<string, HTMLImageElement>();
 
 /**
- * 将表情包图片和配文合成到一张 3:4 比例的画布上，模拟小红书笔记图风格
- * 上半部分：图片
- * 下半部分：白色背景 + 黑色大字配文
+ * 将笔记配图和文字合成成一组 3:4 比例的页面（PNG dataURL 数组）。
+ * 第 1 页含配图 + 标题 + 正文首段；正文过长时自动拆成多页文字页，保证全文不截断。
+ * 解决「正文字数上限 1000 但合成图只放得下约 220 字」的矛盾。
  */
-export async function composeMemeImage(
+export async function composeNoteImage(
   imageUrl: string,
   caption: string,
   title: string,
-): Promise<string> {
+): Promise<string[]> {
+  const img = await loadImage(imageUrl);
+  const cleanTitle = (title || '').trim() || '图文笔记';
+  const cleanCaption = (caption || '').trim();
+  const pages: string[] = [];
+
+  if (!cleanCaption) {
+    pages.push(renderImagePage(img, cleanTitle, ''));
+    return pages;
+  }
+
+  const chunks = splitIntoChunks(cleanCaption, CHARS_PER_PAGE);
+  pages.push(renderImagePage(img, cleanTitle, chunks[0]));
+  for (let i = 1; i < chunks.length; i++) {
+    pages.push(renderTextPage(cleanTitle, chunks[i], i + 1, chunks.length));
+  }
+  return pages;
+}
+
+/** 第 1 页：配图 + 标题 + 首段正文 */
+function renderImagePage(img: HTMLImageElement, title: string, captionChunk: string): string {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas not supported');
+  canvas.width = PAGE_W;
+  canvas.height = PAGE_H;
 
-  const width = 1080;
-  const height = 1440; // 3:4
-  canvas.width = width;
-  canvas.height = height;
-
-  // 白底
   ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0, PAGE_W, PAGE_H);
 
-  // 加载图片
-  const img = await loadImage(imageUrl);
-
-  // 上半部分放图片（正方形区域，居中；缩小以给更多文案留空间）
   const imgAreaTop = 40;
   const imgAreaSize = 820;
-  const imgAreaX = (width - imgAreaSize) / 2;
+  const imgAreaX = (PAGE_W - imgAreaSize) / 2;
   drawImageCover(ctx, img, imgAreaX, imgAreaTop, imgAreaSize, imgAreaSize);
 
-  // 图片边框
   ctx.strokeStyle = '#e5e5e5';
   ctx.lineWidth = 2;
   ctx.strokeRect(imgAreaX, imgAreaTop, imgAreaSize, imgAreaSize);
 
-  // 标题
   const titleY = imgAreaTop + imgAreaSize + 50;
   ctx.fillStyle = '#1a1a1a';
   ctx.font = 'bold 46px "PingFang SC", "Microsoft YaHei", sans-serif';
   ctx.textAlign = 'left';
-  wrapText(ctx, title, 60, titleY, width - 120, 60, 2);
+  wrapText(ctx, title, 60, titleY, PAGE_W - 120, 60, 2);
 
-  // 配文
   const captionY = titleY + 130;
   ctx.fillStyle = '#444444';
   ctx.font = '30px "PingFang SC", "Microsoft YaHei", sans-serif';
-  wrapText(ctx, caption, 60, captionY, width - 120, 46, 7);
+  wrapText(ctx, captionChunk, 60, captionY, PAGE_W - 120, 46, 7);
 
-  // 底部水印
-  ctx.fillStyle = '#cccccc';
-  ctx.font = '24px "PingFang SC", "Microsoft YaHei", sans-serif';
+  drawWatermark(ctx);
+  return canvas.toDataURL('image/png');
+}
+
+/** 续页：纯文字页（标题 + 正文片段 + 页码） */
+function renderTextPage(title: string, captionChunk: string, pageNo: number, total: number): string {
+  const canvas = document.createElement('canvas');
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas not supported');
+  canvas.width = PAGE_W;
+  canvas.height = PAGE_H;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, PAGE_W, PAGE_H);
+
+  ctx.fillStyle = '#1a1a1a';
+  ctx.textAlign = 'left';
+  ctx.font = 'bold 40px "PingFang SC", "Microsoft YaHei", sans-serif';
+  wrapText(ctx, title, 60, 90, PAGE_W - 120, 56, 2);
+
+  ctx.fillStyle = '#444444';
+  ctx.font = '30px "PingFang SC", "Microsoft YaHei", sans-serif';
+  wrapText(ctx, captionChunk, 60, 220, PAGE_W - 120, 46, 26);
+
+  ctx.fillStyle = '#bdbdbd';
   ctx.textAlign = 'center';
-  ctx.fillText('—— 自嘲熊表情包 ——', width / 2, height - 40);
+  ctx.font = '24px "PingFang SC", "Microsoft YaHei", sans-serif';
+  ctx.fillText(`${pageNo} / ${total}`, PAGE_W / 2, PAGE_H - 80);
+
+  drawWatermark(ctx);
+  return canvas.toDataURL('image/png');
+}
+
+function drawWatermark(ctx: CanvasRenderingContext2D) {
+  ctx.fillStyle = '#cccccc';
+  ctx.textAlign = 'center';
+  ctx.font = '24px "PingFang SC", "Microsoft YaHei", sans-serif';
+  ctx.fillText('—— 通用图文笔记 ——', PAGE_W / 2, PAGE_H - 40);
+}
+
+/** 按标点切分正文为多个片段，单段不超过 size 字；超长句子再硬切 */
+function splitIntoChunks(text: string, size: number): string[] {
+  const sentences = text.split(/(?<=[。！？!?；;\n])/);
+  const chunks: string[] = [];
+  let cur = '';
+  for (const s of sentences) {
+    if (!s) continue;
+    if (cur.length + s.length <= size) {
+      cur += s;
+    } else if (s.length > size) {
+      if (cur) {
+        chunks.push(cur);
+        cur = '';
+      }
+      for (let i = 0; i < s.length; i += size) chunks.push(s.slice(i, i + size));
+    } else {
+      chunks.push(cur);
+      cur = s;
+    }
+  }
+  if (cur) chunks.push(cur);
+  return chunks.length ? chunks : [text];
+}
+
+/**
+ * 生成一张离线兜底的占位配图（AI 配图失败时用作笔记封面）。
+ * 中性柔和的背景 + 主题关键词大字，无品牌强绑定，可作为通用封面使用。
+ */
+export async function createPlaceholderImage(keyword: string): Promise<string> {
+  const size = 1080;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Canvas not supported');
+
+  // 柔和米色渐变背景
+  const grad = ctx.createLinearGradient(0, 0, size, size);
+  grad.addColorStop(0, '#faf7f2');
+  grad.addColorStop(1, '#efe9df');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+
+  // 浅色圆角卡片
+  const pad = 90;
+  roundRect(ctx, pad, pad, size - pad * 2, size - pad * 2, 36);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.strokeStyle = '#e7e0d4';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // 顶部小标签
+  ctx.fillStyle = '#b9a98f';
+  ctx.font = '28px "PingFang SC", "Microsoft YaHei", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('图文笔记 · 占位封面', size / 2, 220);
+
+  // 关键词大字
+  ctx.fillStyle = '#3a3a3a';
+  ctx.font = 'bold 72px "PingFang SC", "Microsoft YaHei", sans-serif';
+  wrapText(ctx, keyword || '我的图文笔记', 140, size / 2 - 40, size - 280, 92, 3);
+
+  // 底部说明
+  ctx.fillStyle = '#b9a98f';
+  ctx.font = '26px "PingFang SC", "Microsoft YaHei", sans-serif';
+  ctx.fillText('AI 配图暂不可用，已生成占位图', size / 2, size - 200);
 
   return canvas.toDataURL('image/png');
 }
 
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
 function loadImage(src: string): Promise<HTMLImageElement> {
+  const cached = imageCache.get(src);
+  if (cached) return Promise.resolve(cached);
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
+    img.onload = () => {
+      imageCache.set(src, img);
+      resolve(img);
+    };
     img.onerror = () => {
       logger.warn('图片加载失败，尝试不带 crossOrigin');
       const img2 = new Image();
-      img2.onload = () => resolve(img2);
+      img2.onload = () => {
+        imageCache.set(src, img2);
+        resolve(img2);
+      };
       img2.onerror = reject;
       img2.src = src;
     };
@@ -159,8 +304,63 @@ export function downloadImage(dataUrl: string, filename: string) {
 }
 
 /**
+ * 依次下载一组 dataURL（多页合成图 / 多张配图）。
+ * 张间留间隔，减少被浏览器「一次性多下载」保护拦截的概率。
+ */
+export async function downloadDataUrlList(pages: string[], baseName: string): Promise<number> {
+  let ok = 0;
+  for (let i = 0; i < pages.length; i++) {
+    try {
+      const suffix = pages.length > 1 ? `_${i + 1}` : '';
+      downloadImage(pages[i], `${baseName}${suffix}.png`);
+      ok++;
+    } catch (error) {
+      logger.error(`下载第 ${i + 1} 张失败:`, String(error));
+    }
+    if (i < pages.length - 1) {
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  }
+  return ok;
+}
+
+/**
+ * 把多张 dataURL 打包成一个 zip 一次性下载，避免浏览器「一次性多下载」弹窗。
+ * 单张时直接下载，多张时打包。返回是否成功。
+ */
+export async function downloadDataUrlsAsZip(
+  dataUrls: string[],
+  baseName: string,
+): Promise<boolean> {
+  try {
+    if (dataUrls.length === 1) {
+      downloadImage(dataUrls[0], `${baseName}.png`);
+      return true;
+    }
+    const zip = new JSZip();
+    dataUrls.forEach((d, i) => {
+      const base64 = d.split(',')[1] ?? '';
+      zip.file(`${baseName}_${i + 1}.png`, base64, { base64: true });
+    });
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${baseName}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return true;
+  } catch (error) {
+    logger.error('打包 zip 失败:', String(error));
+    return false;
+  }
+}
+
+/**
  * 按原始尺寸导出配图（不叠加文字），用于发布小红书：
- * 与页面预览完全一致的 3:4 竖图，PNG 保证黑白线条清晰。
+ * 与页面预览完全一致的 3:4 竖图，PNG 保证清晰度。
  */
 export async function exportRawImage(imageUrl: string): Promise<string> {
   const img = await loadImage(imageUrl);
