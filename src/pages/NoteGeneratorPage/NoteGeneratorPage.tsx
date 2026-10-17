@@ -7,7 +7,12 @@ import NoteResultCard from './NoteResultCard';
 import HistorySection from './HistorySection';
 import SettingsDialog from './SettingsDialog';
 import { useNoteHistory } from '@/hooks/use-note-history';
-import { LOCAL_PRESETS, recordImages, type INoteRecord } from '@/data/note';
+import {
+  DEFAULT_STYLE_ID,
+  LOCAL_PRESETS,
+  recordImages,
+  type INoteRecord,
+} from '@/data/note';
 import { generateImage, generateNote, regenerateImage } from '@/lib/ark';
 import { createPlaceholderImage } from '@/lib/image-composer';
 
@@ -35,6 +40,7 @@ export default function NoteGeneratorPage() {
   const [currentKeyword, setCurrentKeyword] = useState('');
   const [imageCount, setImageCount] = useState(1);
   const [textLength, setTextLength] = useState(DEFAULT_TEXT_LENGTH);
+  const [styleId, setStyleId] = useState(DEFAULT_STYLE_ID);
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
   const [isOfflineCaption, setIsOfflineCaption] = useState(false);
 
@@ -73,7 +79,7 @@ export default function NoteGeneratorPage() {
       try {
         // 图、文并行，互不拖累：图失败用占位图兜底，文案失败用本地文案兜底
         const [imgRes, noteRes] = await Promise.allSettled([
-          generateImage(trimmed, count, controller.signal),
+          generateImage(trimmed, count, controller.signal, styleId),
           generateNote(trimmed, textLength, controller.signal),
         ]);
         // 用户已取消，丢弃结果
@@ -122,6 +128,7 @@ export default function NoteGeneratorPage() {
           caption: caption || '今天也要认真生活，把喜欢的事记录下来～',
           tags: tags.length > 0 ? tags : ['图文笔记', '小红书', trimmed],
           createdAt: Date.now(),
+          styleId,
         };
 
         setCurrentRecord(record);
@@ -138,7 +145,7 @@ export default function NoteGeneratorPage() {
         setIsGenerating(false);
       }
     },
-    [isBusy, addRecord, imageCount, textLength],
+    [isBusy, addRecord, imageCount, textLength, styleId],
   );
 
   // 取消当前生成
@@ -165,7 +172,8 @@ export default function NoteGeneratorPage() {
 
       setRegeneratingIndex(index);
       try {
-        const newUrl = await regenerateImage(currentRecord.keyword);
+        // 沿用该记录生成时的风格，保证重生成与原有配图风格一致
+        const newUrl = await regenerateImage(currentRecord.keyword, currentRecord.styleId ?? styleId);
         // 重生成期间若用户已切换到其它记录，则丢弃本次结果，避免覆盖错误记录
         if (recordIdRef.current !== startId) return;
         const nextImages = prevImages.slice();
@@ -181,7 +189,7 @@ export default function NoteGeneratorPage() {
         setRegeneratingIndex(null);
       }
     },
-    [currentRecord, regeneratingIndex, updateRecord],
+    [currentRecord, regeneratingIndex, updateRecord, styleId],
   );
 
   const handleSelectHistory = useCallback(
@@ -226,6 +234,8 @@ export default function NoteGeneratorPage() {
             onImageCountChange={setImageCount}
             textLength={textLength}
             onTextLengthChange={setTextLength}
+            styleId={styleId}
+            onStyleChange={setStyleId}
           />
         </section>
 

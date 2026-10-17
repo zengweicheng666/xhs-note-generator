@@ -2,6 +2,7 @@
 // 走 Vite dev 代理 /ark-api；key 优先取界面设置（localStorage），代理层注入 Authorization
 
 import { getSettings } from './settings'
+import { DEFAULT_STYLE_ID, getStylePrompt } from '@/data/note'
 
 export interface IArkNote {
   title: string
@@ -27,10 +28,11 @@ async function requestImageOnce(
   total: number,
   extraHint = '',
   signal?: AbortSignal,
+  styleId: string = DEFAULT_STYLE_ID,
 ): Promise<string> {
   const { imageModel } = getSettings()
   const parts = [
-    '极简清新插画风格的小红书笔记配图，纯白背景，',
+    `${getStylePrompt(styleId)}的小红书笔记配图，纯白背景，`,
     '主体明确、画面干净简洁，主题相关，',
     `主题关键词：${keyword}，适合作为小红书图文笔记封面，`,
     '构图居中、留白充足，无任何文字，整体治愈柔和。',
@@ -84,13 +86,14 @@ export async function generateImage(
   keyword: string,
   count = 1,
   signal?: AbortSignal,
+  styleId: string = DEFAULT_STYLE_ID,
 ): Promise<string[]> {
   const total = Math.max(1, Math.min(Math.floor(count) || 1, 8))
   // 每批加随机变化，保证每次「换一换」视觉差异更大（背景保持纯白，避免不同张背景色不一致）
   const seed = Math.floor(Math.random() * 1_000_000)
-  const variation = `整体基调保持清新治愈，保持纯白背景不变，可自由发挥构图与主体配色（批次变化 ${seed}）。`
+  const variation = `${getStylePrompt(styleId)}，整体基调保持清新治愈，保持纯白背景不变，可自由发挥构图与主体配色（批次变化 ${seed}）。`
   const tasks = Array.from({ length: total }, (_, i) =>
-    withRetry(() => requestImageOnce(keyword, i + 1, total, variation, signal), signal),
+    withRetry(() => requestImageOnce(keyword, i + 1, total, variation, signal, styleId), signal),
   )
   const results = await Promise.allSettled(tasks)
   const urls = results
@@ -107,14 +110,17 @@ export async function generateImage(
  * 重新生成单张配图：带随机变化提示，尽量与现有画面不同，
  * 用于「单独重生成某一张」而不影响同一笔记的其它配图。
  */
-export async function regenerateImage(keyword: string): Promise<string> {
+export async function regenerateImage(
+  keyword: string,
+  styleId: string = DEFAULT_STYLE_ID,
+): Promise<string> {
   const seed = Math.floor(Math.random() * 1_000_000)
-  // 关键：明确要求「保持纯白背景、风格不变」，仅在构图/视角/元素上变化，
-  // 否则模型会把背景也换掉，导致重生成图片与首次生成的白色背景不一致。
+  // 关键：明确要求「保持纯白背景、所选风格不变」，仅在构图/视角/元素上变化，
+  // 否则模型会把背景或风格也换掉，导致重生成图片与首次生成不一致。
   const hint =
-    `请重新创作一张版本（变化编号 ${seed}）：保持纯白背景、画面干净简洁的风格不变，` +
+    `请重新创作一张版本（变化编号 ${seed}）：保持纯白背景、${getStylePrompt(styleId)}的风格不变，` +
     '仅在构图、视角、主体摆放或细节元素上做出区别，与之前的版本布局不同但整体调性一致。'
-  return requestImageOnce(keyword, 1, 1, hint)
+  return requestImageOnce(keyword, 1, 1, hint, undefined, styleId)
 }
 
 /** 调豆包文本模型，生成标题/配文/标签（JSON）；maxLen 控制正文最大字数 */

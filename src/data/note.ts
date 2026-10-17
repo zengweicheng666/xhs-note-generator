@@ -1,4 +1,4 @@
-// EXPORTS: INoteRecord, TOPIC_KEYWORDS
+// EXPORTS: INoteRecord, TOPIC_KEYWORDS, NOTE_STYLES, DEFAULT_STYLE_ID, getStylePrompt
 
 export interface INoteRecord {
   id: string;
@@ -12,6 +12,44 @@ export interface INoteRecord {
   caption: string;
   tags: string[];
   createdAt: number;
+  /** 生成配图时使用的风格 id（重生成时沿用，保证风格一致；旧记录可能没有） */
+  styleId?: string;
+}
+
+/** 配图风格：用户可在界面选择，prompt 片段会拼进文生图提示词 */
+export interface INoteStyle {
+  id: string;
+  label: string;
+  /** 拼接进提示词的风格描述 */
+  prompt: string;
+}
+
+// 可选的配图风格列表（背景统一保持纯白，保证首次生成与重生成、多张之间风格一致）
+export const NOTE_STYLES: INoteStyle[] = [
+  { id: 'fresh', label: '极简清新', prompt: '极简清新插画风格' },
+  { id: 'cartoon', label: '卡通手绘', prompt: '可爱卡通手绘风格' },
+  { id: 'clay', label: '3D 黏土', prompt: '3D 黏土盲盒风格，立体质感、柔和建模光' },
+  { id: 'watercolor', label: '水彩', prompt: '柔和清新水彩画风格，纸纹质感' },
+  { id: 'flat', label: '扁平插画', prompt: '现代扁平矢量插画风格，色块简洁' },
+  { id: 'lineart', label: '极简线条', prompt: '极简线条插画风格，单色勾线、大量留白' },
+  { id: 'guochao', label: '复古国潮', prompt: '复古国潮插画风格，传统纹样与配色' },
+  { id: 'morandi', label: '莫兰迪', prompt: '莫兰迪低饱和度插画风格，高级灰配色' },
+  { id: 'photo', label: '写实摄影', prompt: '真实摄影风格，柔和自然光、浅景深' },
+  { id: 'film', label: '日系胶片', prompt: '日系胶片摄影风格，柔和颗粒感' },
+];
+
+export const DEFAULT_STYLE_ID = 'fresh';
+
+/** 按 id 取风格描述片段，未知 id 回退到默认风格 */
+export function getStylePrompt(id?: string): string {
+  const hit = NOTE_STYLES.find((s) => s.id === id);
+  return hit ? hit.prompt : NOTE_STYLES[0].prompt;
+}
+
+/** 按 id 取风格显示名 */
+export function getStyleLabel(id?: string): string {
+  const hit = NOTE_STYLES.find((s) => s.id === id);
+  return hit ? hit.label : NOTE_STYLES[0].label;
 }
 
 /** 取记录的配图数组，兼容只有 imageUrl 的旧记录 */

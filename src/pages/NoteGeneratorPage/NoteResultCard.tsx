@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Image } from '@/components/ui/image';
 import { composeNoteImage, downloadDataUrlList } from '@/lib/image-composer';
 import PublishDialog from './PublishDialog';
-import { recordImages, type INoteRecord } from '@/data/note';
+import { getStyleLabel, recordImages, type INoteRecord } from '@/data/note';
 
 interface NoteResultCardProps {
   record: INoteRecord | null;
@@ -207,11 +207,18 @@ export default function NoteResultCard({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="text-xs text-muted-foreground">标题（可编辑）</label>
-                {isOfflineCaption && (
-                  <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                    离线示例文案
-                  </span>
-                )}
+                <div className="flex items-center gap-1.5">
+                  {record?.styleId && (
+                    <span className="text-xs text-primary bg-primary/10 px-2 py-0.5 rounded-full">
+                      风格：{getStyleLabel(record.styleId)}
+                    </span>
+                  )}
+                  {isOfflineCaption && (
+                    <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                      离线示例文案
+                    </span>
+                  )}
+                </div>
               </div>
               <Input
                 value={editTitle}

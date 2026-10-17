@@ -2,7 +2,7 @@ import { useState, useCallback, type FormEvent, type KeyboardEvent } from 'react
 import { Shuffle, Sparkles, Minus, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { TOPIC_KEYWORDS } from '@/data/note';
+import { NOTE_STYLES, TOPIC_KEYWORDS } from '@/data/note';
 import { cn } from '@/lib/utils';
 
 export const MAX_IMAGE_COUNT = 4;
@@ -19,6 +19,9 @@ interface NoteInputSectionProps {
   onImageCountChange: (n: number) => void;
   textLength: number;
   onTextLengthChange: (n: number) => void;
+  /** 当前选择的配图风格 id */
+  styleId: string;
+  onStyleChange: (id: string) => void;
 }
 
 export default function NoteInputSection({
@@ -30,6 +33,8 @@ export default function NoteInputSection({
   onImageCountChange,
   textLength,
   onTextLengthChange,
+  styleId,
+  onStyleChange,
 }: NoteInputSectionProps) {
   const [keyword, setKeyword] = useState(initialKeyword);
 
@@ -173,6 +178,36 @@ export default function NoteInputSection({
           </Button>
         </div>
         <span className="text-xs text-muted-foreground/70">（{MIN_TEXT_LENGTH}–{MAX_TEXT_LENGTH} 字，默认 {DEFAULT_TEXT_LENGTH} 字）</span>
+      </div>
+
+      {/* 配图风格选择 */}
+      <div className="mb-4">
+        <div className="flex items-center gap-3 mb-2">
+          <span className="text-sm text-muted-foreground shrink-0">配图风格</span>
+          <span className="text-xs text-muted-foreground/70">
+            （共 {NOTE_STYLES.length} 种，当前：{NOTE_STYLES.find((s) => s.id === styleId)?.label ?? NOTE_STYLES[0].label}）
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {NOTE_STYLES.map((style) => (
+            <button
+              key={style.id}
+              type="button"
+              onClick={() => onStyleChange(style.id)}
+              disabled={isLoading}
+              title={style.prompt}
+              className={cn(
+                'px-3 py-1.5 text-sm rounded-full border transition-colors',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
+                style.id === styleId
+                  ? 'border-primary bg-primary/10 text-primary font-medium'
+                  : 'border-border bg-card hover:border-primary/40 hover:bg-primary/5',
+              )}
+            >
+              {style.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* 主题快捷标签 */}
