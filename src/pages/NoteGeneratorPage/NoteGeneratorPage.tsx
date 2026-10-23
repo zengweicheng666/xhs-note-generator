@@ -22,6 +22,7 @@ import {
 } from '@/data/note';
 import { generateImage, generateNote, regenerateImage } from '@/lib/ark';
 import { createPlaceholderImage } from '@/lib/image-composer';
+import { persistImage, persistImages } from '@/lib/image-store';
 
 type GenerateStage = 'idle' | 'image' | 'text' | 'done';
 
@@ -50,6 +51,8 @@ export default function NoteGeneratorPage() {
   const [styleId, setStyleId] = useState(DEFAULT_STYLE_ID);
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null);
   const [isOfflineCaption, setIsOfflineCaption] = useState(false);
+  // 配图已失效的记录 id 集合（由历史列表的图片加载失败上报）
+  const [expiredIds, setExpiredIds] = useState<Record<string, boolean>>({});
 
   // 统一忙碌状态：整条生成 或 单张重生成 进行中
   const isBusy = isGenerating || regeneratingIndex !== null;
@@ -136,6 +139,10 @@ export default function NoteGeneratorPage() {
         const now = Date.now();
         const seq = nextSeqForDay(history, now);
 
+        // 方舟图片链接只有 24 小时有效期，这里转存到工程 public/notes/ 目录，
+        // 历史记录里用稳定的本地 URL，避免隔天图片全部失效
+        imageUrls = await persistImages(imageUrls, `图文笔记_${makeNoteLabel(now, seq)}`);
+
         const record: INoteRecord = {
           id: `note_${now}_${Math.random().toString(36).slice(2, 8)}`,
           keyword: trimmed,
@@ -196,8 +203,13 @@ export default function NoteGeneratorPage() {
         const newUrl = await regenerateImage(currentRecord.keyword, currentRecord.styleId ?? styleId);
         // 重生成期间若用户已切换到其它记录，则丢弃本次结果，避免覆盖错误记录
         if (recordIdRef.current !== startId) return;
+        // 同样转存到本地目录，避免新图 24 小时后失效
+        const savedUrl = await persistImage(
+          newUrl,
+          `图文笔记_${makeNoteLabel(currentRecord.createdAt, currentRecord.seq)}_${index + 1}`,
+        );
         const nextImages = prevImages.slice();
-        nextImages[index] = newUrl;
+        nextImages[index] = savedUrl ?? newUrl;
         const nextRecord: INoteRecord = { ...currentRecord, imageUrls: nextImages };
         setCurrentRecord(nextRecord);
         updateRecord(nextRecord);
@@ -233,6 +245,58 @@ export default function NoteGeneratorPage() {
     },
     [isBusy, textLength],
   );
+
+  // 批量重新生成失效的历史配图（原图已过期为唯一可行方案，生成的新图会自动落盘）
+  const [regeneratingExpired, setRegeneratingExpired] = useState(false);
+  const handleRegenerateExpired = useCallback(async () => {
+    if (isBusy || regeneratingExpired) return;
+    const targets = history.filter((r) => {
+      const urls = recordImages(r);
+      // 本地占位图（data:）不是失效；其余非 /notes/ 的远程图视为可能失效，
+      // 以 HistorySection 上报的加载失败为准（见 expiredIds）
+      return expiredIds[r.id] && urls.length > 0;
+    });
+    if (targets.length === 0) return;
+
+    setRegeneratingExpired(true);
+    let okCount = 0;
+    let failCount = 0;
+    try {
+      for (const record of targets) {
+        const urls = recordImages(record);
+        const nextImages = [...urls];
+        let recordOk = true;
+        for (let i = 0; i < urls.length; i++) {
+          try {
+            // 用原主题 + 原风格重新生成，尽量贴近原记录
+            const fresh = await regenerateImage(record.keyword, record.styleId ?? styleId);
+            const saved = await persistImage(
+              fresh,
+              `图文笔记_${makeNoteLabel(record.createdAt, record.seq)}_${i + 1}`,
+            );
+            nextImages[i] = saved ?? fresh;
+          } catch (error) {
+            recordOk = false;
+            logger.warn(`重新生成「${record.keyword}」第 ${i + 1} 张失败:`, String(error));
+          }
+        }
+        if (recordOk) okCount += 1;
+        else failCount += 1;
+        // 仅当该记录仍是当前展示的记录时，同步刷新右侧卡片
+        if (recordIdRef.current === record.id) {
+          setCurrentRecord((prev) =>
+            prev && prev.id === record.id ? { ...prev, imageUrls: nextImages, imageUrl: nextImages[0] } : prev,
+          );
+        }
+        updateRecord({ ...record, imageUrls: nextImages, imageUrl: nextImages[0] });
+      }
+      if (okCount > 0) toast.success(`已重新生成 ${okCount} 条记录的配图，并保存到本地目录`);
+      if (failCount > 0) toast.error(`${failCount} 条记录生成失败（可能是额度不足），可稍后再试`);
+      setExpiredIds({});
+    } finally {
+      setRegeneratingExpired(false);
+    }
+  }, [isBusy, regeneratingExpired, history, expiredIds, styleId, updateRecord]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-orange-50/60 via-background to-background">
@@ -295,6 +359,9 @@ export default function NoteGeneratorPage() {
             onDelete={deleteRecord}
             onClear={clearHistory}
             selectedId={currentRecord?.id}
+            onExpiredIdsChange={setExpiredIds}
+            onRegenerateExpired={handleRegenerateExpired}
+            regeneratingExpired={regeneratingExpired}
           />
         </section>
 

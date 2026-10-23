@@ -41,6 +41,8 @@ export default function NoteResultCard({
   const [isDownloading, setIsDownloading] = useState(false);
   const [titleIdx, setTitleIdx] = useState(0);
   const [imageIdx, setImageIdx] = useState(0);
+  // 配图加载失败：多为方舟临时链接超过 24 小时失效（本地持久化的图不会失效）
+  const [imageFailed, setImageFailed] = useState(false);
 
   const images = record ? recordImages(record) : [];
   const mainImage = images[imageIdx] || images[0] || '';
@@ -57,6 +59,7 @@ export default function NoteResultCard({
   useEffect(() => {
     setTitleIdx(0);
     setImageIdx(0);
+    setImageFailed(false);
     if (record) {
       const t = record.titles?.length ? record.titles : [record.title];
       setEditTitle(t[0] || record.title || '');
@@ -126,6 +129,8 @@ export default function NoteResultCard({
                 loading="eager"
                 decoding="auto"
                 className="w-full h-full object-cover"
+                onError={() => setImageFailed(true)}
+                onLoad={() => setImageFailed(false)}
               />
               {/* 单张重新生成：重新生成当前这张，不影响其它图与文案 */}
               {!isGenerating && (
@@ -149,6 +154,23 @@ export default function NoteResultCard({
                   <p className="text-sm text-muted-foreground">
                     正在重新生成第 {imageIdx + 1} 张配图...
                   </p>
+                </div>
+              )}
+              {/* 配图失效提示：方舟链接 24 小时后过期，可直接重新生成（新图会自动存到本地） */}
+              {imageFailed && !isGenerating && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-muted/60 backdrop-blur-sm px-6 text-center">
+                  <ImageIcon className="size-8 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    这张配图已失效（方舟链接仅 24 小时有效，本地保存的图不会失效）
+                  </p>
+                  <Button
+                    size="sm"
+                    onClick={() => onRegenerateImage(imageIdx)}
+                    disabled={isRegeneratingCurrent}
+                  >
+                    <RefreshCw className={'size-4 mr-1.5 ' + (isRegeneratingThis ? 'animate-spin' : '')} />
+                    {isRegeneratingThis ? '重新生成中' : '重新生成这张'}
+                  </Button>
                 </div>
               )}
               {images.length > 1 && (

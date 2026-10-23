@@ -134,10 +134,12 @@ export async function generateNote(
     '你是小红书资深爆款文案写手，擅长把任何主题写成有吸引力、有干货、有共鸣的笔记。',
     '写作要求：',
     '1. 开头一两句就抓住人：用具体场景、痛点或反差切入，不要空泛抒情，不要「今天给大家分享」这类套话开场。',
-    '2. 正文用 2-4 个分点讲清楚，每点要有具体细节、方法、数量或例子，避免空话和形容词堆砌。',
-    '3. 语气像真人分享：口语化、真诚、有画面感，克制使用颜文字（每段最多 1 个）。',
-    '4. 结尾一句总结或互动引导，自然收束。',
-    '5. 不夸大承诺、不编造数据、不写空洞口号，不重复同一句话。',
+    '2. 正文段落数量由内容决定，不要固定套用「①②③」三条结构：信息少就用 2 段说透，信息多可以展开到 4-5 段；该分点时自然分点，不适合分点就写成连贯段落。',
+    '3. 每段都要有具体细节、方法、数量或例子，每段写够 2-4 句、不要一句话草草带过；段落开头形式要随内容变化（序号、小标题、emoji、直接叙述都可以），不要每篇都用同一种写法。',
+    '4. 字数要写足：按要求的字数区间来写，宁可多补细节，也不要写短了交差。',
+    '5. 语气像真人分享：口语化、真诚、有画面感，克制使用颜文字（每段最多 1 个）。',
+    '6. 结尾一句总结或互动引导，自然收束。',
+    '7. 不夸大承诺、不编造数据、不写空洞口号，不重复同一句话。',
     '只输出 JSON，不要输出任何解释或 markdown。',
   ].join('\n')
   const minLen = Math.round(maxLen * 0.7)
@@ -146,13 +148,13 @@ export async function generateNote(
     '请围绕这个关键词写一组小红书笔记文案，只输出 JSON（不要 markdown 代码块）：',
     '{',
     '  "titles": ["备选标题1","备选标题2","备选标题3"],',
-    `  "content": "正文：开头钩子 1-2 句；然后 2-4 个分点，每点用「①」「②」或 emoji 开头并单独成段；结尾 1 句总结或互动引导。段落之间用一个空行分隔，JSON 字符串里的换行用 \\n 表示。总字数 ${minLen}-${maxLen} 字。",`,
+    `  "content": "正文：开头钩子 1-2 句；中间按内容自然分成若干段，段数随信息量决定（2 段、3 段、5 段都正常，不要为凑数硬拆，也不要为省事硬压），段落开头可以是「①」序号、短小标题、emoji 或直接叙述，形式随内容变化；结尾 1 句总结或互动引导。段落之间用一个空行分隔，JSON 字符串里的换行用 \\n 表示。总字数 ${minLen}-${maxLen} 字（硬性要求：正文不少于 ${minLen} 字；不足时补充更多具体细节、步骤、例子来写足，不要靠注水和重复凑数）。",`,
     '  "tags": ["6个标签，不带#号，覆盖主题/场景/人群"]',
     '}',
     '要求：',
     '1. 三个标题风格各异（吸睛型、干货型、共鸣型），每个不超过 20 字，不堆砌感叹号；',
     '2. content 必须是合法 JSON 字符串，内部换行用 \\n 表示，不要出现未转义的真实换行；',
-    '3. 排版清晰：分段明确、每点独立成行，可直接复制发布。',
+    '3. 排版清晰：段落分明、段间空一行，可直接复制发布；不要出现两条以上句式完全相同的段落开头。',
   ].join('\n')
 
   const resp = await fetch('/ark-api/chat/completions', {
@@ -194,12 +196,61 @@ export function normalizeNoteText(raw: string): string {
     .trim()
 }
 
+/**
+ * 修复模型输出的非法 JSON：字符串内部若出现未转义的真实换行 / 制表符，
+ * 会导致整段 JSON.parse 失败。这里逐字符扫描，把字符串内的控制字符转义掉。
+ */
+function repairJsonControlChars(src: string): string {
+  let out = ''
+  let inString = false
+  let escaped = false
+  for (const ch of src) {
+    if (inString) {
+      if (escaped) {
+        out += ch
+        escaped = false
+        continue
+      }
+      if (ch === '\\') {
+        out += ch
+        escaped = true
+        continue
+      }
+      if (ch === '"') {
+        out += ch
+        inString = false
+        continue
+      }
+      if (ch === '\n') {
+        out += '\\n'
+        continue
+      }
+      if (ch === '\r') continue
+      if (ch === '\t') {
+        out += '\\t'
+        continue
+      }
+      out += ch
+      continue
+    }
+    if (ch === '"') inString = true
+    out += ch
+  }
+  return out
+}
+
 function parseNoteJson(raw: string, keyword: string, maxLen = 300): IArkNote {
   // 容错：模型可能用 ```json 包裹
   const match = raw.match(/\{[\s\S]*\}/)
   if (match) {
     try {
-      const obj = JSON.parse(match[0])
+      let obj: Record<string, unknown>
+      try {
+        obj = JSON.parse(match[0])
+      } catch {
+        // 模型可能把正文里的换行直接写进了 JSON 字符串，先修复再解析
+        obj = JSON.parse(repairJsonControlChars(match[0]))
+      }
       let titles: string[] = []
       if (Array.isArray(obj.titles)) {
         titles = obj.titles
@@ -213,7 +264,7 @@ function parseNoteJson(raw: string, keyword: string, maxLen = 300): IArkNote {
       return {
         title: titles[0] || `关于${keyword}的图文笔记`,
         titles,
-        content: normalizeNoteText(obj.content).slice(0, maxLen),
+        content: normalizeNoteText(String(obj.content ?? '')).slice(0, maxLen),
         tags: Array.isArray(obj.tags)
           ? obj.tags.map((t: unknown) => String(t).replace(/^#/, '').trim()).slice(0, 8)
           : [],
